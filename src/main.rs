@@ -1,7 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
 
+mod decode;
+mod idl;
 mod logs;
+mod programs;
 mod render;
 mod rpc;
 
@@ -31,7 +34,7 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| DEFAULT_RPC.to_string());
 
     let tx = rpc::fetch_transaction(&rpc_url, &cli.signature)?;
-    render::print_postmortem(&tx)?;
+    render::print_postmortem(&rpc_url, &tx)?;
 
     Ok(())
 }

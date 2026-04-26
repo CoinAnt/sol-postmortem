@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 solana-pubkey = { version = "2", default-features = false, features = ["std"] }
 solana-transaction-status = { version = "2", default-features = false }
+solana-transaction-error = { version = "2", default-features = false }
+solana-instruction = { version = "2", default-features = false, features = ["std"] }
 ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 borsh = "1"
 serde = { version = "1", features = ["derive"] }
@@ -22,6 +24,8 @@ anyhow = "1"
 bs58 = "0.5"
 hex = "0.4"
 sha2 = "0.10"
+flate2 = "1"
+base64 = "0.22"
 
 [profile.release]
 lto = "thin"
