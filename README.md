@@ -1,32 +1,34 @@
-# solpm
+# sol-postmortem
 
 Solana transaction postmortem. Paste a signature, get a developer-grade debug view: every program invocation as a CPI tree, compute units per hop, success/fail per hop, and the actual failure reason from program logs.
 
-Block explorers are built for browsing. `solpm` is built for the moment a transaction failed in production and you need to understand it, fast.
+Block explorers are built for browsing. `sol-postmortem` is built for the moment a transaction failed in production and you need to understand it, fast.
+
+The crate is `sol-postmortem`; the binary it installs is `solpmortem`.
 
 ## Install
 
-Requires a recent Rust toolchain (tested on 1.93).
-
 ```bash
-git clone <this-repo>
-cd solpm
-cargo install --path .
+cargo install sol-postmortem
 ```
 
-Or run directly without installing:
+That gives you `solpmortem` on your PATH. Requires a recent Rust toolchain (tested on 1.93).
+
+To run from a checkout instead:
 
 ```bash
+git clone https://github.com/<owner>/sol-postmortem
+cd sol-postmortem
 cargo run -- <tx-signature>
 ```
 
 ## Usage
 
 ```bash
-solpm <tx-signature>
-solpm <tx-signature> --rpc https://your-rpc-endpoint
-solpm <tx-signature> --json | jq '.status'
-solpm <tx-signature> --color never > postmortem.txt
+solpmortem <tx-signature>
+solpmortem <tx-signature> --rpc https://your-rpc-endpoint
+solpmortem <tx-signature> --json | jq '.status'
+solpmortem <tx-signature> --color never > postmortem.txt
 ```
 
 The RPC URL resolves in this order: `--rpc` flag, `SOLPM_RPC_URL` env var, then `https://api.mainnet-beta.solana.com`. The public endpoint is rate-limited and only retains recent history — point at your own RPC (Helius, Triton, QuickNode, or a private node) for anything serious.
@@ -46,7 +48,7 @@ Emits a single pretty-printed JSON object to stdout instead of the terminal-form
 
 ## Example
 
-A successful Pump.fun AMM swap. Each tree node shows the program label, the decoded instruction call (when the program has an on-chain IDL), and compute units. The diff sections below show what actually moved on-chain:
+A successful Pump.fun AMM swap. Each tree node shows the program label, the decoded instruction call (when the program has an on-chain IDL), and compute units. The diff sections below show what actually moved on-chain. The trailing `…` truncates account pubkeys for display.
 
 ```text
 [ OK ] slot 415823696  fee 15000 lamports
@@ -75,7 +77,7 @@ A successful Pump.fun AMM swap. Each tree node shows the program label, the deco
 
 The `[sw]` / `[-w]` flags mean signer-writable / non-signer-writable. The token diff includes the new total post-trade so you can verify both sides of the trade balance.
 
-A failed Voltr → Drift cross-program call. The error originated three levels deep, and `Custom(101)` is an Anchor framework code, not a program-defined one — `solpm` translates it to its actual name. Note that `drift` shows no decoded call: that's exactly the diagnostic, since `InstructionFallbackNotFound` means drift didn't recognise the discriminator the adapter sent it.
+A failed Voltr → Drift cross-program call. The error originated three levels deep, and `Custom(101)` is an Anchor framework code, not a program-defined one — `sol-postmortem` translates it to its actual name. Note that `drift` shows no decoded call: that's exactly the diagnostic, since `InstructionFallbackNotFound` means drift didn't recognise the discriminator the adapter sent it.
 
 ```text
 [FAIL] slot 415857495  fee 10000 lamports
@@ -95,7 +97,7 @@ A failed Voltr → Drift cross-program call. The error originated three levels d
 
 ## Status
 
-**v0.3 — useful.** What's wired up:
+**Early but useful.** What's wired up:
 
 - Tx fetch by signature against any RPC.
 - Single CPI tree showing every executed instruction (top-level + inner) with depth-correct indentation, compute units per hop, success/fail badges, and the decoded `program.instruction { args }` inline at each node — when the program has an on-chain Anchor IDL we can fetch. Both new-format (Anchor >= 0.30, explicit discriminators) and old-format (Anchor < 0.30, discriminator computed at runtime as `sha256("global:" + snake_case(name))[..8]`) IDLs are supported.
@@ -117,7 +119,7 @@ Pure Rust, single static binary on release.
 - `ureq` (rustls) for the JSON-RPC POST. Avoids the openssl-sys dependency that `solana-client` pulls transitively, which doesn't build cleanly on Windows MSVC without OpenSSL installed.
 - `solana-transaction-status` for the response types, `solana-pubkey` for the `Pubkey` type, `solana-transaction-error` + `solana-instruction` for structurally pattern-matching the failure type.
 - `flate2` for zlib-decompressing the on-chain Anchor IDL payload, `serde_json` to parse it. The IDL → Borsh decoder is hand-rolled in `src/decode.rs` rather than using `@coral-xyz/anchor`'s JS-only equivalent.
-- `clap` for the CLI, `owo-colors` for the terminal output, `anyhow` for error plumbing.
+- `clap` for the CLI, `anyhow` for error plumbing. Terminal styling is hand-rolled in `src/style.rs` so `--color never` (and stdout-isn't-a-tty) actually emit clean plain text — most ANSI crates always emit escape codes regardless of any global override.
 
 ## License
 

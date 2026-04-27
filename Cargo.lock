@@ -1667,6 +1667,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
+name = "sol-postmortem"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "borsh 1.6.1",
+ "bs58",
+ "clap",
+ "flate2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-instruction",
+ "solana-pubkey",
+ "solana-transaction-error",
+ "solana-transaction-status",
+ "ureq",
+]
+
+[[package]]
 name = "solana-account"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2795,27 +2816,6 @@ dependencies = [
  "thiserror 2.0.18",
  "wasm-bindgen",
  "zeroize",
-]
-
-[[package]]
-name = "solpm"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "borsh 1.6.1",
- "bs58",
- "clap",
- "flate2",
- "hex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "solana-instruction",
- "solana-pubkey",
- "solana-transaction-error",
- "solana-transaction-status",
- "ureq",
 ]
 
 [[package]]

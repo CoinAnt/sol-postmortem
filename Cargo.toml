@@ -1,12 +1,15 @@
 [package]
-name = "solpm"
-version = "0.0.1"
+name = "sol-postmortem"
+version = "0.1.0"
 edition = "2021"
-description = "Solana transaction postmortem — decode, trace, and explain any tx by signature."
+description = "Solana transaction postmortem — decode the CPI tree, account diffs, and the actual failure reason for any tx by signature."
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["solana", "cli", "postmortem", "transaction", "debugging"]
+categories = ["command-line-utilities", "development-tools::debugging"]
 
 [[bin]]
-name = "solpm"
+name = "solpmortem"
 path = "src/main.rs"
 
 [dependencies]
