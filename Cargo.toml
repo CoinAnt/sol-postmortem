@@ -5,6 +5,7 @@ edition = "2021"
 description = "Solana transaction postmortem — decode the CPI tree, account diffs, and the actual failure reason for any tx by signature."
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/CoinAnt/sol-postmortem"
 keywords = ["solana", "cli", "postmortem", "transaction", "debugging"]
 categories = ["command-line-utilities", "development-tools::debugging"]
 

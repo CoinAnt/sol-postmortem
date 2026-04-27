@@ -17,7 +17,7 @@ That gives you `solpmortem` on your PATH. Requires a recent Rust toolchain (test
 To run from a checkout instead:
 
 ```bash
-git clone https://github.com/<owner>/sol-postmortem
+git clone https://github.com/CoinAnt/sol-postmortem
 cd sol-postmortem
 cargo run -- <tx-signature>
 ```
