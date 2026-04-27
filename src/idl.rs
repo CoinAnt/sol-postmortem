@@ -19,6 +19,7 @@ use anyhow::{anyhow, Context, Result};
 use flate2::read::ZlibDecoder;
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use solana_pubkey::Pubkey;
 use std::collections::HashMap;
 use std::io::Read;
@@ -186,7 +187,14 @@ fn parse_idl(json: Value) -> Idl {
 
 fn parse_instruction(entry: &Value) -> Option<IdlInstruction> {
     let name = entry.get("name")?.as_str()?.to_string();
-    let discriminator = entry.get("discriminator").and_then(parse_discriminator)?;
+    // New-format IDLs (Anchor >= 0.30) carry an explicit discriminator.
+    // Old-format IDLs don't — Anchor computed it at compile time as
+    // sha256("global:" + snake_case(name))[..8]. Replicate that here so
+    // pre-0.30 programs (whose IDL names are camelCase) still decode.
+    let discriminator = entry
+        .get("discriminator")
+        .and_then(parse_discriminator)
+        .unwrap_or_else(|| compute_global_discriminator(&name));
     let args = entry
         .get("args")
         .and_then(|v| v.as_array())
@@ -197,6 +205,29 @@ fn parse_instruction(entry: &Value) -> Option<IdlInstruction> {
         discriminator,
         args,
     })
+}
+
+/// Anchor's runtime discriminator: sha256("global:" + snake_case(name))[..8].
+pub fn compute_global_discriminator(name: &str) -> [u8; 8] {
+    let snake = camel_to_snake(name);
+    let preimage = format!("global:{snake}");
+    let hash = Sha256::digest(preimage.as_bytes());
+    let mut out = [0u8; 8];
+    out.copy_from_slice(&hash[..8]);
+    out
+}
+
+/// Convert a camelCase or PascalCase identifier to snake_case.
+/// Idempotent on names that are already snake_case.
+fn camel_to_snake(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 4);
+    for (i, c) in s.chars().enumerate() {
+        if i > 0 && c.is_ascii_uppercase() {
+            out.push('_');
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    out
 }
 
 fn parse_discriminator(v: &Value) -> Option<[u8; 8]> {
@@ -316,4 +347,68 @@ fn parse_error(entry: &Value) -> Option<IdlError> {
         name: raw.name,
         msg: raw.msg,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn camel_to_snake_handles_common_cases() {
+        assert_eq!(camel_to_snake("initialize"), "initialize");
+        assert_eq!(camel_to_snake("initializeUser"), "initialize_user");
+        assert_eq!(camel_to_snake("InitializeUser"), "initialize_user");
+        assert_eq!(camel_to_snake("amountIn"), "amount_in");
+        assert_eq!(camel_to_snake("alreadySnakeCase"), "already_snake_case");
+        assert_eq!(camel_to_snake("already_snake"), "already_snake");
+        assert_eq!(camel_to_snake(""), "");
+    }
+
+    #[test]
+    fn discriminator_is_deterministic_and_8_bytes() {
+        let a = compute_global_discriminator("initialize");
+        let b = compute_global_discriminator("initialize");
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 8);
+    }
+
+    #[test]
+    fn discriminator_matches_across_camel_and_snake() {
+        // Old-format IDL names are camelCase; Anchor hashes the snake_case form.
+        // So both spellings must yield the same discriminator.
+        let camel = compute_global_discriminator("initializeUser");
+        let snake = compute_global_discriminator("initialize_user");
+        assert_eq!(camel, snake);
+    }
+
+    #[test]
+    fn discriminator_differs_across_names() {
+        assert_ne!(
+            compute_global_discriminator("initialize"),
+            compute_global_discriminator("close")
+        );
+    }
+
+    #[test]
+    fn parse_instruction_falls_back_to_computed_discriminator() {
+        // An IDL entry without an explicit "discriminator" field — old format.
+        let entry = serde_json::json!({
+            "name": "initializeUser",
+            "args": []
+        });
+        let ix = parse_instruction(&entry).expect("parsed");
+        assert_eq!(ix.name, "initializeUser");
+        assert_eq!(ix.discriminator, compute_global_discriminator("initialize_user"));
+    }
+
+    #[test]
+    fn parse_instruction_prefers_explicit_discriminator() {
+        let entry = serde_json::json!({
+            "name": "swap",
+            "discriminator": [1, 2, 3, 4, 5, 6, 7, 8],
+            "args": []
+        });
+        let ix = parse_instruction(&entry).expect("parsed");
+        assert_eq!(ix.discriminator, [1, 2, 3, 4, 5, 6, 7, 8]);
+    }
 }

@@ -83,7 +83,7 @@ A failed Voltr → Drift cross-program call. The error originated three levels d
 **v0.3 — useful.** What's wired up:
 
 - Tx fetch by signature against any RPC.
-- Single CPI tree showing every executed instruction (top-level + inner) with depth-correct indentation, compute units per hop, success/fail badges, and the decoded `program.instruction { args }` inline at each node — when the program has an on-chain Anchor IDL we can fetch.
+- Single CPI tree showing every executed instruction (top-level + inner) with depth-correct indentation, compute units per hop, success/fail badges, and the decoded `program.instruction { args }` inline at each node — when the program has an on-chain Anchor IDL we can fetch. Both new-format (Anchor >= 0.30, explicit discriminators) and old-format (Anchor < 0.30, discriminator computed at runtime as `sha256("global:" + snake_case(name))[..8]`) IDLs are supported.
 - Programs without a published IDL fall back to a known-program label registry (`spl-token`, `system`, `compute-budget`, `jupiter v6`, `drift v2`, etc.), then raw program ID.
 - Lamport balance changes per account, with signer/writable flags and before/after balances.
 - SPL token balance changes per account, decimal-aware, with mint label (well-known mints like USDC/USDT/WSOL/BONK get symbols; others show the raw mint).
@@ -93,8 +93,8 @@ A failed Voltr → Drift cross-program call. The error originated three levels d
 What's not yet:
 
 - Per-instruction state diffs (today's diffs are transaction-level totals; per-instruction would need SVM simulation).
-- Old-format Anchor IDLs (Anchor < 0.30, where instruction discriminators were derived implicitly from the snake_case name).
 - Address-table-lookup expansion in the *tree* (the diffs already see ALT-loaded accounts, but the executed-ix list doesn't yet show their pubkeys).
+- `--json` output mode for piping into other tools.
 
 ## How it's built
 
