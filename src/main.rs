@@ -1,10 +1,11 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 
 mod decode;
 mod diffs;
 mod idl;
 mod logs;
+mod postmortem;
 mod programs;
 mod render;
 mod rpc;
@@ -25,6 +26,11 @@ struct Cli {
     /// RPC URL. Falls back to $SOLPM_RPC_URL, then mainnet-beta.
     #[arg(long)]
     rpc: Option<String>,
+
+    /// Emit a single pretty-printed JSON object to stdout instead of the
+    /// terminal-formatted view. Useful for piping into jq or other tools.
+    #[arg(long)]
+    json: bool,
 }
 
 fn main() -> Result<()> {
@@ -36,7 +42,14 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| DEFAULT_RPC.to_string());
 
     let tx = rpc::fetch_transaction(&rpc_url, &cli.signature)?;
-    render::print_postmortem(&rpc_url, &tx)?;
+    let pm = postmortem::assemble(&rpc_url, &cli.signature, &tx);
+
+    if cli.json {
+        let s = serde_json::to_string_pretty(&pm).context("serialise postmortem to JSON")?;
+        println!("{s}");
+    } else {
+        render::print_pretty(&pm);
+    }
 
     Ok(())
 }

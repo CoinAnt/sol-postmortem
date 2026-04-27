@@ -21,6 +21,7 @@ use anyhow::{anyhow, bail, Result};
 use solana_pubkey::Pubkey;
 
 /// Outcome of trying to decode an instruction's data against an IDL.
+#[derive(Debug)]
 pub enum DecodeOutcome {
     /// We matched a discriminator and successfully decoded all args.
     Decoded {
@@ -70,35 +71,6 @@ pub fn decode_instruction(idl: &Idl, data: &[u8]) -> DecodeOutcome {
     DecodeOutcome::Decoded {
         ix_name: ix.name.clone(),
         args,
-    }
-}
-
-/// Render a decoded outcome as a single line, e.g.:
-///   `swap { amount_in: 1000000, min_amount_out: 950000 }`
-pub fn render_outcome(outcome: &DecodeOutcome) -> Option<String> {
-    match outcome {
-        DecodeOutcome::Decoded { ix_name, args } => Some(format_call(ix_name, args, None)),
-        DecodeOutcome::PartiallyDecoded {
-            ix_name,
-            args,
-            error,
-        } => Some(format_call(ix_name, args, Some(error))),
-        DecodeOutcome::NoMatch => None,
-    }
-}
-
-fn format_call(ix_name: &str, args: &[(String, String)], error: Option<&str>) -> String {
-    if args.is_empty() && error.is_none() {
-        return ix_name.to_string();
-    }
-    let inner = args
-        .iter()
-        .map(|(k, v)| format!("{k}: {v}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    match error {
-        Some(e) => format!("{ix_name} {{ {inner}, <decode error: {e}> }}"),
-        None => format!("{ix_name} {{ {inner} }}"),
     }
 }
 
@@ -389,8 +361,19 @@ mod tests {
         data.extend_from_slice(&950_000u64.to_le_bytes());
 
         let out = decode_instruction(&idl, &data);
-        let rendered = render_outcome(&out).expect("decoded");
-        assert_eq!(rendered, "swap { amount_in: 1000000, min_out: 950000 }");
+        match out {
+            DecodeOutcome::Decoded { ix_name, args } => {
+                assert_eq!(ix_name, "swap");
+                assert_eq!(
+                    args,
+                    vec![
+                        ("amount_in".into(), "1000000".into()),
+                        ("min_out".into(), "950000".into()),
+                    ]
+                );
+            }
+            other => panic!("expected Decoded, got {other:?}"),
+        }
     }
 
     #[test]

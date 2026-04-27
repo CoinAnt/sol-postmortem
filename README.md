@@ -25,9 +25,19 @@ cargo run -- <tx-signature>
 ```bash
 solpm <tx-signature>
 solpm <tx-signature> --rpc https://your-rpc-endpoint
+solpm <tx-signature> --json | jq '.status'
 ```
 
 The RPC URL resolves in this order: `--rpc` flag, `SOLPM_RPC_URL` env var, then `https://api.mainnet-beta.solana.com`. The public endpoint is rate-limited and only retains recent history — point at your own RPC (Helius, Triton, QuickNode, or a private node) for anything serious.
+
+### `--json`
+
+Emits a single pretty-printed JSON object to stdout instead of the terminal-formatted view. Schema highlights:
+
+- `status.result`: `"success"` or `"failed"`. When `failed`, includes `instruction_index`, `top_program_label`, `code` (raw, e.g. `"Custom(101)"`), `name` (resolved when possible), `source` (`"idl"` or `"anchor_framework"`), and `originating_program_*` for failures that propagated from a deeper CPI.
+- `trace`: array of `{ depth, program_id, program_label, instruction, compute_units, status, fail_reason }`. `instruction` is `null` when the program has no IDL or its discriminator didn't match.
+- `diffs.lamports`: `{ pubkey, is_signer, is_writable, before, after, delta }`. Lamport fields are JSON numbers (typical values fit in a JS safe int); `delta` is a string since it can be negative i128 in pathological cases.
+- `diffs.tokens`: `{ pubkey, mint, mint_symbol, decimals, before_raw, after_raw, delta_raw, before_ui, after_ui, delta_ui }`. Raw amounts are strings (u128 routinely overflows JS safe int for tokens with many decimals); UI amounts are decimal-scaled strings.
 
 ## Example
 
@@ -94,7 +104,6 @@ What's not yet:
 
 - Per-instruction state diffs (today's diffs are transaction-level totals; per-instruction would need SVM simulation).
 - Address-table-lookup expansion in the *tree* (the diffs already see ALT-loaded accounts, but the executed-ix list doesn't yet show their pubkeys).
-- `--json` output mode for piping into other tools.
 
 ## How it's built
 

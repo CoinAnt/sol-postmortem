@@ -11,6 +11,7 @@
 //     [static keys from message, then writable loaded, then readonly loaded].
 
 use owo_colors::OwoColorize;
+use serde::Serialize;
 use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::{
     EncodedTransaction, UiMessage, UiTransactionStatusMeta, UiTransactionTokenBalance,
@@ -18,39 +19,52 @@ use solana_transaction_status::{
 
 use crate::tokens;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct LamportDiff {
     pub pubkey: String,
     pub is_signer: bool,
     pub is_writable: bool,
     pub before: u64,
     pub after: u64,
+    /// Signed delta in lamports, serialised as a string to dodge JS precision
+    /// loss for large negative values.
+    #[serde(serialize_with = "i128_as_string")]
+    pub delta: i128,
 }
 
-impl LamportDiff {
-    pub fn delta(&self) -> i128 {
-        self.after as i128 - self.before as i128
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct TokenDiff {
     pub pubkey: String,
     pub mint: String,
+    /// Friendly mint symbol when known (e.g. "WSOL", "USDC"), else None.
+    pub mint_symbol: Option<String>,
     pub decimals: u8,
+    /// Raw token amounts as u128 — serialised as strings since they routinely
+    /// exceed JS safe integer range for tokens with many decimals.
+    #[serde(serialize_with = "u128_as_string")]
     pub before_raw: u128,
+    #[serde(serialize_with = "u128_as_string")]
     pub after_raw: u128,
+    #[serde(serialize_with = "i128_as_string")]
+    pub delta_raw: i128,
+    /// Decimal-scaled human-readable strings (e.g. "1.234567").
+    pub before_ui: String,
+    pub after_ui: String,
+    pub delta_ui: String,
 }
 
-impl TokenDiff {
-    pub fn delta_raw(&self) -> i128 {
-        self.after_raw as i128 - self.before_raw as i128
-    }
-}
-
+#[derive(Debug, Serialize)]
 pub struct DiffSummary {
     pub lamports: Vec<LamportDiff>,
     pub tokens: Vec<TokenDiff>,
+}
+
+fn u128_as_string<S: serde::Serializer>(v: &u128, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&v.to_string())
+}
+
+fn i128_as_string<S: serde::Serializer>(v: &i128, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&v.to_string())
 }
 
 pub fn compute(tx: &EncodedTransaction, meta: &UiTransactionStatusMeta) -> DiffSummary {
@@ -92,12 +106,14 @@ pub fn compute(tx: &EncodedTransaction, meta: &UiTransactionStatusMeta) -> DiffS
             writable_unsigned_count,
             loaded_writable_count,
         );
+        let delta = after as i128 - before as i128;
         lamports.push(LamportDiff {
             pubkey,
             is_signer,
             is_writable,
             before,
             after,
+            delta,
         });
     }
 
@@ -149,12 +165,22 @@ pub fn compute(tx: &EncodedTransaction, meta: &UiTransactionStatusMeta) -> DiffS
             .cloned()
             .unwrap_or_else(|| format!("<idx {idx}>"));
 
+        let delta_raw = after_raw as i128 - before_raw as i128;
+        let mint_symbol = tokens::symbol(&mint).map(String::from);
+        let before_ui = ui_amount(before_raw as f64, decimals);
+        let after_ui = ui_amount(after_raw as f64, decimals);
+        let delta_ui = ui_amount(delta_raw as f64, decimals);
         tokens.push(TokenDiff {
             pubkey,
             mint,
+            mint_symbol,
             decimals,
             before_raw,
             after_raw,
+            delta_raw,
+            before_ui,
+            after_ui,
+            delta_ui,
         });
     }
 
@@ -175,10 +201,9 @@ pub fn print(summary: &DiffSummary) {
                 if d.is_signer { "s" } else { "-" },
                 if d.is_writable { "w" } else { "-" }
             );
-            let delta = d.delta();
-            let delta_sol = delta as f64 / 1_000_000_000.0;
+            let delta_sol = d.delta as f64 / 1_000_000_000.0;
             let arrow = format!("{:+.9} SOL", delta_sol);
-            let coloured = if delta > 0 {
+            let coloured = if d.delta > 0 {
                 arrow.green().to_string()
             } else {
                 arrow.red().to_string()
@@ -198,25 +223,21 @@ pub fn print(summary: &DiffSummary) {
         println!();
         println!("  {}", "Token changes:".bold());
         for d in &summary.tokens {
-            let symbol = tokens::symbol(&d.mint).unwrap_or("");
-            let mint_label = if symbol.is_empty() {
-                format!("mint {}", short(&d.mint))
-            } else {
-                format!("{symbol} ({})", short(&d.mint))
+            let mint_label = match &d.mint_symbol {
+                Some(sym) => format!("{sym} ({})", short(&d.mint)),
+                None => format!("mint {}", short(&d.mint)),
             };
-            let delta = d.delta_raw();
-            let delta_ui = ui_amount(delta as f64, d.decimals);
-            let arrow = if delta > 0 {
-                format!("+{delta_ui}").green().to_string()
+            let arrow = if d.delta_raw > 0 {
+                format!("+{}", d.delta_ui).green().to_string()
             } else {
-                format!("{delta_ui}").red().to_string()
+                d.delta_ui.clone().red().to_string()
             };
             println!(
                 "    {}  {}  {} → {}  ({})",
                 short(&d.pubkey).cyan(),
                 arrow,
-                ui_amount(d.before_raw as f64, d.decimals).dimmed(),
-                ui_amount(d.after_raw as f64, d.decimals).dimmed(),
+                d.before_ui.dimmed(),
+                d.after_ui.dimmed(),
                 mint_label.dimmed(),
             );
         }
