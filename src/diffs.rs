@@ -10,13 +10,13 @@
 //   pre/post_balances are indexed against the combined list:
 //     [static keys from message, then writable loaded, then readonly loaded].
 
-use owo_colors::OwoColorize;
 use serde::Serialize;
 use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::{
     EncodedTransaction, UiMessage, UiTransactionStatusMeta, UiTransactionTokenBalance,
 };
 
+use crate::style;
 use crate::tokens;
 
 #[derive(Debug, Serialize)]
@@ -194,51 +194,97 @@ pub fn print(summary: &DiffSummary) {
 
     if !summary.lamports.is_empty() {
         println!();
-        println!("  {}", "Lamport changes:".bold());
-        for d in &summary.lamports {
-            let flags = format!(
-                "[{}{}]",
-                if d.is_signer { "s" } else { "-" },
-                if d.is_writable { "w" } else { "-" }
-            );
-            let delta_sol = d.delta as f64 / 1_000_000_000.0;
-            let arrow = format!("{:+.9} SOL", delta_sol);
-            let coloured = if d.delta > 0 {
-                arrow.green().to_string()
+        println!("  {}", style::bold("Lamport changes:"));
+
+        // Pre-format raw strings so we can compute max widths and right-align
+        // the numeric columns regardless of magnitude.
+        let rows: Vec<(String, String, String, String, String, bool)> = summary
+            .lamports
+            .iter()
+            .map(|d| {
+                let flags = format!(
+                    "[{}{}]",
+                    if d.is_signer { "s" } else { "-" },
+                    if d.is_writable { "w" } else { "-" }
+                );
+                let delta_str = format!("{:+.9} SOL", d.delta as f64 / 1_000_000_000.0);
+                (
+                    flags,
+                    short(&d.pubkey),
+                    delta_str,
+                    lamports_to_sol(d.before),
+                    lamports_to_sol(d.after),
+                    d.delta > 0,
+                )
+            })
+            .collect();
+        let w_delta = rows.iter().map(|r| r.2.len()).max().unwrap_or(0);
+        let w_before = rows.iter().map(|r| r.3.len()).max().unwrap_or(0);
+        let w_after = rows.iter().map(|r| r.4.len()).max().unwrap_or(0);
+
+        for (flags, pubkey, delta_str, before_str, after_str, positive) in rows {
+            let padded_delta = format!("{:>w$}", delta_str, w = w_delta);
+            let coloured_delta = if positive {
+                style::green(&padded_delta)
             } else {
-                arrow.red().to_string()
+                style::red(&padded_delta)
             };
             println!(
                 "    {} {}  {}  {} → {}",
-                flags.dimmed(),
-                short(&d.pubkey).cyan(),
-                coloured,
-                lamports_to_sol(d.before).dimmed(),
-                lamports_to_sol(d.after).dimmed(),
+                style::dim(&flags),
+                style::cyan(&pubkey),
+                coloured_delta,
+                style::dim(&format!("{:>w$}", before_str, w = w_before)),
+                style::dim(&format!("{:>w$}", after_str, w = w_after)),
             );
         }
     }
 
     if !summary.tokens.is_empty() {
         println!();
-        println!("  {}", "Token changes:".bold());
-        for d in &summary.tokens {
-            let mint_label = match &d.mint_symbol {
-                Some(sym) => format!("{sym} ({})", short(&d.mint)),
-                None => format!("mint {}", short(&d.mint)),
-            };
-            let arrow = if d.delta_raw > 0 {
-                format!("+{}", d.delta_ui).green().to_string()
+        println!("  {}", style::bold("Token changes:"));
+
+        let rows: Vec<(String, String, bool, String, String, String)> = summary
+            .tokens
+            .iter()
+            .map(|d| {
+                let delta_disp = if d.delta_raw > 0 {
+                    format!("+{}", d.delta_ui)
+                } else {
+                    d.delta_ui.clone()
+                };
+                let mint_label = match &d.mint_symbol {
+                    Some(sym) => format!("{sym} ({})", short(&d.mint)),
+                    None => format!("mint {}", short(&d.mint)),
+                };
+                (
+                    short(&d.pubkey),
+                    delta_disp,
+                    d.delta_raw > 0,
+                    d.before_ui.clone(),
+                    d.after_ui.clone(),
+                    mint_label,
+                )
+            })
+            .collect();
+        let w_delta = rows.iter().map(|r| r.1.len()).max().unwrap_or(0);
+        let w_before = rows.iter().map(|r| r.3.len()).max().unwrap_or(0);
+        let w_after = rows.iter().map(|r| r.4.len()).max().unwrap_or(0);
+
+        for (pubkey, delta_str, positive, before_str, after_str, mint_label) in rows {
+            let padded_delta = format!("{:>w$}", delta_str, w = w_delta);
+            let coloured_delta = if positive {
+                style::green(&padded_delta)
             } else {
-                d.delta_ui.clone().red().to_string()
+                style::red(&padded_delta)
             };
             println!(
                 "    {}  {}  {} → {}  ({})",
-                short(&d.pubkey).cyan(),
-                arrow,
-                d.before_ui.dimmed(),
-                d.after_ui.dimmed(),
-                mint_label.dimmed(),
+                style::cyan(&pubkey),
+                coloured_delta,
+                style::dim(&format!("{:>w$}", before_str, w = w_before)),
+                style::dim(&format!("{:>w$}", after_str, w = w_after)),
+                style::dim(&mint_label),
             );
         }
     }

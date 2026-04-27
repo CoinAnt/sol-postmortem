@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use std::io::IsTerminal;
+use std::process::ExitCode;
 
 mod decode;
 mod diffs;
@@ -9,6 +11,7 @@ mod postmortem;
 mod programs;
 mod render;
 mod rpc;
+mod style;
 mod tokens;
 
 const DEFAULT_RPC: &str = "https://api.mainnet-beta.solana.com";
@@ -31,10 +34,48 @@ struct Cli {
     /// terminal-formatted view. Useful for piping into jq or other tools.
     #[arg(long)]
     json: bool,
+
+    /// When to use colored output.
+    /// `auto` (default): colors when stdout is a terminal and NO_COLOR is unset.
+    /// `always` / `never` force the choice regardless.
+    #[arg(long, value_enum, default_value = "auto")]
+    color: ColorMode,
 }
 
-fn main() -> Result<()> {
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum ColorMode {
+    Auto,
+    Always,
+    Never,
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{}: {e}", style::red_bold("solpm"));
+            for cause in e.chain().skip(1) {
+                eprintln!("  {} {cause}", style::dim("caused by:"));
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
+
+    // Decide colors first so even error messages from below honour the choice.
+    let use_color = match cli.color {
+        ColorMode::Always => true,
+        ColorMode::Never => false,
+        ColorMode::Auto => {
+            std::env::var_os("NO_COLOR").is_none()
+                && !cli.json
+                && std::io::stdout().is_terminal()
+        }
+    };
+    style::set_enabled(use_color);
 
     let rpc_url = cli
         .rpc

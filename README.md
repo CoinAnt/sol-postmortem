@@ -26,9 +26,14 @@ cargo run -- <tx-signature>
 solpm <tx-signature>
 solpm <tx-signature> --rpc https://your-rpc-endpoint
 solpm <tx-signature> --json | jq '.status'
+solpm <tx-signature> --color never > postmortem.txt
 ```
 
 The RPC URL resolves in this order: `--rpc` flag, `SOLPM_RPC_URL` env var, then `https://api.mainnet-beta.solana.com`. The public endpoint is rate-limited and only retains recent history — point at your own RPC (Helius, Triton, QuickNode, or a private node) for anything serious.
+
+### `--color`
+
+`auto` (default), `always`, or `never`. Auto enables colours when stdout is a terminal and the standard `NO_COLOR` env var isn't set; `--json` always disables them. Force on or off with the explicit values when piping to a logger or redirecting to a file.
 
 ### `--json`
 

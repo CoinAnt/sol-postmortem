@@ -1,9 +1,8 @@
-use owo_colors::OwoColorize;
-
 use crate::diffs;
 use crate::postmortem::{
     DecodedInstruction, NodeStatus, Postmortem, PostmortemStatus, TraceNode,
 };
+use crate::style;
 
 pub fn print_pretty(pm: &Postmortem) {
     print_header(pm);
@@ -20,9 +19,9 @@ fn print_header(pm: &Postmortem) {
     println!();
     let failed = matches!(pm.status, PostmortemStatus::Failed { .. });
     let badge = if failed {
-        "FAIL".red().bold().to_string()
+        style::red_bold("FAIL")
     } else {
-        " OK ".green().bold().to_string()
+        style::green_bold(" OK ")
     };
     println!(
         "  [{badge}] slot {}  fee {} lamports",
@@ -42,31 +41,35 @@ fn print_trace(nodes: &[TraceNode]) {
         return;
     }
     println!();
-    println!("  {}", "Execution trace:".bold());
+    println!("  {}", style::bold("Execution trace:"));
     for node in nodes {
         let indent = "  ".repeat(node.depth);
         let badge = match node.status {
-            NodeStatus::Ok => " ok ".green().to_string(),
-            NodeStatus::Fail => "FAIL".red().bold().to_string(),
-            NodeStatus::Unknown => " ?? ".yellow().to_string(),
+            NodeStatus::Ok => style::green(" ok "),
+            NodeStatus::Fail => style::red_bold("FAIL"),
+            NodeStatus::Unknown => style::yellow(" ?? "),
         };
         let cu = match node.compute_units {
-            Some(n) => format!("{n} CU").dimmed().to_string(),
-            None => "— CU".dimmed().to_string(),
+            Some(n) => style::dim(&format!("{n} CU")),
+            None => style::dim("— CU"),
         };
         match &node.instruction {
             Some(ix) => println!(
                 "  {indent}[{badge}] {}  {}  {cu}",
-                node.program_label.cyan(),
+                style::cyan(&node.program_label),
                 format_call(ix),
             ),
             None => println!(
                 "  {indent}[{badge}] {}  {cu}",
-                node.program_label.cyan()
+                style::cyan(&node.program_label),
             ),
         }
         if let Some(reason) = &node.fail_reason {
-            println!("  {indent}      {} {}", "└─ reason:".dimmed(), reason.red());
+            println!(
+                "  {indent}      {} {}",
+                style::dim("└─ reason:"),
+                style::red(reason),
+            );
         }
     }
 }
@@ -97,7 +100,7 @@ fn print_status(pm: &Postmortem) {
     println!();
     match &pm.status {
         PostmortemStatus::Success => {
-            println!("{} {}", "  status:".bold(), "SUCCESS".green().bold());
+            println!("  {} {}", style::bold("status:"), style::green_bold("SUCCESS"));
         }
         PostmortemStatus::Failed {
             instruction_index,
@@ -113,33 +116,33 @@ fn print_status(pm: &Postmortem) {
             match (instruction_index, name) {
                 (Some(idx), Some(n)) => {
                     println!(
-                        "{} {} — instruction #{idx} ({}) failed: {}",
-                        "  status:".bold(),
-                        "FAILED".red().bold(),
-                        label.cyan(),
-                        n.red().bold()
+                        "  {} {} — instruction #{idx} ({}) failed: {}",
+                        style::bold("status:"),
+                        style::red_bold("FAILED"),
+                        style::cyan(&label),
+                        style::red_bold(n),
                     );
                     if let Some(origin) = originating_program_label {
                         if origin != &label {
-                            println!("           originated in {}", origin.cyan());
+                            println!("           originated in {}", style::cyan(origin));
                         }
                     }
                 }
                 (Some(idx), None) => {
                     println!(
-                        "{} {} — instruction #{idx} ({}) failed: {}",
-                        "  status:".bold(),
-                        "FAILED".red().bold(),
-                        label.cyan(),
-                        code.red().bold()
+                        "  {} {} — instruction #{idx} ({}) failed: {}",
+                        style::bold("status:"),
+                        style::red_bold("FAILED"),
+                        style::cyan(&label),
+                        style::red_bold(code),
                     );
                 }
                 (None, _) => {
                     println!(
-                        "{} {} — {}",
-                        "  status:".bold(),
-                        "FAILED".red().bold(),
-                        code.red().bold()
+                        "  {} {} — {}",
+                        style::bold("status:"),
+                        style::red_bold("FAILED"),
+                        style::red_bold(code),
                     );
                 }
             }
