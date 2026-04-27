@@ -31,25 +31,34 @@ The RPC URL resolves in this order: `--rpc` flag, `SOLPM_RPC_URL` env var, then 
 
 ## Example
 
-A successful Pump.fun AMM swap. Each tree node shows the program label, the decoded instruction call (when the program has an on-chain IDL), and compute units. CPI children are indented under their caller:
+A successful Pump.fun AMM swap. Each tree node shows the program label, the decoded instruction call (when the program has an on-chain IDL), and compute units. The diff sections below show what actually moved on-chain:
 
 ```text
 [ OK ] slot 415823696  fee 15000 lamports
 
   Execution trace:
-    [ ok ] compute-budget                    — CU
-    [ ok ] compute-budget                    — CU
     [ ok ] spl-associated-token-account      20600 CU
       [ ok ] spl-token                        1569 CU
       [ ok ] system                           — CU
-      [ ok ] spl-token                        1405 CU
     [ ok ] pump_amm  buy_exact_quote_in { spendable_quote_in: 1581045, min_base_amount_out: 1551612806, ... }  97118 CU
       [ ok ] pump_fees  get_fees { is_pump_pool: true, market_cap_lamports: 517779801768, trade_size_lamports: 1581045 }  4658 CU
       [ ok ] spl-token-2022                   2475 CU
       [ ok ] spl-token                        6238 CU
 
+  Lamport changes:
+    [sw] 65ZTb9…XY9V  -0.003670125 SOL  0.013770325 SOL → 0.010100200 SOL
+    [-w] 49snKg…tcBp  +0.002074080 SOL  0.000000000 SOL → 0.002074080 SOL
+    [-w] 6hx1Px…tNM8  +0.001565421 SOL  95.954265310 SOL → 95.955830731 SOL
+
+  Token changes:
+    49snKg…tcBp  +3017.247018  0.000000 → 3017.247018  (mint 98Q9Va…pump)
+    6hx1Px…tNM8  +0.001565421  95.952226 → 95.953792  (WSOL)
+    EiGR6M…9fd8  -3017.247018  185314733.6036 → 185311716.3566  (mint 98Q9Va…pump)
+
   status: SUCCESS
 ```
+
+The `[sw]` / `[-w]` flags mean signer-writable / non-signer-writable. The token diff includes the new total post-trade so you can verify both sides of the trade balance.
 
 A failed Voltr → Drift cross-program call. The error originated three levels deep, and `Custom(101)` is an Anchor framework code, not a program-defined one — `solpm` translates it to its actual name. Note that `drift` shows no decoded call: that's exactly the diagnostic, since `InstructionFallbackNotFound` means drift didn't recognise the discriminator the adapter sent it.
 
@@ -71,18 +80,21 @@ A failed Voltr → Drift cross-program call. The error originated three levels d
 
 ## Status
 
-**v0.2 — useful.** What's wired up:
+**v0.3 — useful.** What's wired up:
 
 - Tx fetch by signature against any RPC.
 - Single CPI tree showing every executed instruction (top-level + inner) with depth-correct indentation, compute units per hop, success/fail badges, and the decoded `program.instruction { args }` inline at each node — when the program has an on-chain Anchor IDL we can fetch.
 - Programs without a published IDL fall back to a known-program label registry (`spl-token`, `system`, `compute-budget`, `jupiter v6`, `drift v2`, etc.), then raw program ID.
+- Lamport balance changes per account, with signer/writable flags and before/after balances.
+- SPL token balance changes per account, decimal-aware, with mint label (well-known mints like USDC/USDT/WSOL/BONK get symbols; others show the raw mint).
 - For failed transactions: the failing instruction is identified by index and program. The error code is resolved against (1) the failing program's IDL `errors` table, (2) any IDL in the failed CPI chain (the error may have originated below the top level), then (3) Anchor's built-in framework error table (`InstructionFallbackNotFound`, `ConstraintSeeds`, etc.).
+- Versioned (v0) transactions: account indices for diffs are resolved against the static keys plus `meta.loaded_addresses` (writable + readonly) so diffs work for accounts loaded via address-table lookups.
 
 What's not yet:
 
-- Account state diffs (lamports, parsed token balances) per instruction.
-- Versioned-tx address-table-lookup expansion.
+- Per-instruction state diffs (today's diffs are transaction-level totals; per-instruction would need SVM simulation).
 - Old-format Anchor IDLs (Anchor < 0.30, where instruction discriminators were derived implicitly from the snake_case name).
+- Address-table-lookup expansion in the *tree* (the diffs already see ALT-loaded accounts, but the executed-ix list doesn't yet show their pubkeys).
 
 ## How it's built
 

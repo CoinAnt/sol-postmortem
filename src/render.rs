@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use crate::decode;
+use crate::diffs;
 use crate::idl::{self, Idl};
 use crate::logs::{self, InvocationStatus, ProgramInvocation};
 use crate::programs;
@@ -55,6 +56,9 @@ pub fn print_postmortem(rpc_url: &str, tx: &EncodedConfirmedTransactionWithStatu
     let decoded = decode_each(&invocations, &executed, &idl_cache);
 
     print_invocations(&invocations, &decoded, &idl_cache);
+
+    let summary = diffs::compute(&tx.transaction.transaction, meta);
+    diffs::print(&summary);
 
     print_status(meta.err.as_ref(), &invocations, &idl_cache);
 

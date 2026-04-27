@@ -2,11 +2,13 @@ use anyhow::Result;
 use clap::Parser;
 
 mod decode;
+mod diffs;
 mod idl;
 mod logs;
 mod programs;
 mod render;
 mod rpc;
+mod tokens;
 
 const DEFAULT_RPC: &str = "https://api.mainnet-beta.solana.com";
 
