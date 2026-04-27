@@ -18,7 +18,7 @@ const DEFAULT_RPC: &str = "https://api.mainnet-beta.solana.com";
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "solpm",
+    name = "solpmortem",
     version,
     about = "Solana transaction postmortem — decode, trace, and explain any tx by signature."
 )]
@@ -26,7 +26,7 @@ struct Cli {
     /// Transaction signature (base58)
     signature: String,
 
-    /// RPC URL. Falls back to $SOLPM_RPC_URL, then mainnet-beta.
+    /// RPC URL. Falls back to $SOLPMORTEM_RPC_URL, then mainnet-beta.
     #[arg(long)]
     rpc: Option<String>,
 
@@ -53,7 +53,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{}: {e}", style::red_bold("solpm"));
+            eprintln!("{}: {e}", style::red_bold("solpmortem"));
             for cause in e.chain().skip(1) {
                 eprintln!("  {} {cause}", style::dim("caused by:"));
             }
@@ -79,7 +79,7 @@ fn run() -> Result<()> {
 
     let rpc_url = cli
         .rpc
-        .or_else(|| std::env::var("SOLPM_RPC_URL").ok())
+        .or_else(|| std::env::var("SOLPMORTEM_RPC_URL").ok())
         .unwrap_or_else(|| DEFAULT_RPC.to_string());
 
     let tx = rpc::fetch_transaction(&rpc_url, &cli.signature)?;

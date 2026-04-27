@@ -31,7 +31,7 @@ solpmortem <tx-signature> --json | jq '.status'
 solpmortem <tx-signature> --color never > postmortem.txt
 ```
 
-The RPC URL resolves in this order: `--rpc` flag, `SOLPM_RPC_URL` env var, then `https://api.mainnet-beta.solana.com`. The public endpoint is rate-limited and only retains recent history — point at your own RPC (Helius, Triton, QuickNode, or a private node) for anything serious.
+The RPC URL resolves in this order: `--rpc` flag, `SOLPMORTEM_RPC_URL` env var, then `https://api.mainnet-beta.solana.com`. The public endpoint is rate-limited and only retains recent history — point at your own RPC (Helius, Triton, QuickNode, or a private node) for anything serious.
 
 ### `--color`
 
