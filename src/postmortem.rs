@@ -14,6 +14,7 @@ use solana_transaction_status::{
 };
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::thread;
 
 use crate::decode::{self, DecodeOutcome};
 use crate::diffs::{self, DiffSummary};
@@ -126,16 +127,7 @@ pub fn assemble(
     };
 
     let executed = build_executed(&tx.transaction.transaction, inner_instructions);
-
-    let mut idl_cache: HashMap<String, Option<Idl>> = HashMap::new();
-    for ix in &executed {
-        idl_cache
-            .entry(ix.program_id.clone())
-            .or_insert_with(|| match Pubkey::from_str(&ix.program_id) {
-                Ok(pid) => idl::fetch(rpc_url, &pid).unwrap_or(None),
-                Err(_) => None,
-            });
-    }
+    let idl_cache = fetch_idls_parallel(rpc_url, &executed);
 
     let invocations = logs::parse(&log_messages);
     let trace = build_trace(&invocations, &executed, &idl_cache);
@@ -152,6 +144,59 @@ pub fn assemble(
         trace,
         diffs,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Parallel IDL fetch
+// ---------------------------------------------------------------------------
+
+/// Fetch every unique program's IDL concurrently, one thread per program.
+/// ureq is sync but threadsafe; std::thread::scope keeps the borrow of
+/// `rpc_url` checked at compile time.
+///
+/// `Ok(None)` from idl::fetch (account simply doesn't exist) is silent.
+/// `Err(_)` (network error, RPC error, parse failure) emits a stderr
+/// warning so users hitting rate limits can tell the difference between
+/// "no IDL published" and "fetch failed — try again".
+fn fetch_idls_parallel(rpc_url: &str, executed: &[ExecutedIx]) -> HashMap<String, Option<Idl>> {
+    let mut unique: Vec<String> = executed.iter().map(|x| x.program_id.clone()).collect();
+    unique.sort();
+    unique.dedup();
+
+    if unique.is_empty() {
+        return HashMap::new();
+    }
+
+    let results: Vec<(String, Option<Idl>)> = thread::scope(|s| {
+        let handles: Vec<_> = unique
+            .iter()
+            .map(|pid_str| {
+                let pid_str = pid_str.clone();
+                s.spawn(move || fetch_one(rpc_url, pid_str))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("idl fetch worker panicked"))
+            .collect()
+    });
+
+    results.into_iter().collect()
+}
+
+fn fetch_one(rpc_url: &str, pid_str: String) -> (String, Option<Idl>) {
+    let pid = match Pubkey::from_str(&pid_str) {
+        Ok(p) => p,
+        Err(_) => return (pid_str, None),
+    };
+    let idl = match idl::fetch(rpc_url, &pid) {
+        Ok(idl) => idl,
+        Err(e) => {
+            eprintln!("warning: IDL fetch failed for {pid_str}: {e}");
+            None
+        }
+    };
+    (pid_str, idl)
 }
 
 // ---------------------------------------------------------------------------

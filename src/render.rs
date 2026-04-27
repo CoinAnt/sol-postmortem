@@ -74,11 +74,15 @@ fn print_trace(nodes: &[TraceNode]) {
     }
 }
 
+/// Cap each arg value at this many bytes; longer values get an ellipsis.
+/// JSON output stays full-fidelity — this is just for terminal readability.
+const MAX_ARG_VALUE_LEN: usize = 64;
+
 fn format_call(ix: &DecodedInstruction) -> String {
     let inner = ix
         .args
         .iter()
-        .map(|a| format!("{}: {}", a.name, a.value))
+        .map(|a| format!("{}: {}", a.name, truncate_value(&a.value, MAX_ARG_VALUE_LEN)))
         .collect::<Vec<_>>()
         .join(", ");
     let body = if ix.args.is_empty() {
@@ -89,6 +93,46 @@ fn format_call(ix: &DecodedInstruction) -> String {
     match &ix.partial_decode_error {
         Some(e) => format!("{body}  <decode error: {e}>"),
         None => body,
+    }
+}
+
+/// Truncate to at most `max` bytes, snapping to a UTF-8 char boundary so we
+/// never panic on multi-byte content. Appends `…` (a single Unicode char,
+/// not three dots) when truncation actually happened.
+fn truncate_value(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &s[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_passes_through_short_values() {
+        assert_eq!(truncate_value("hello", 64), "hello");
+        assert_eq!(truncate_value("", 64), "");
+    }
+
+    #[test]
+    fn truncate_caps_long_values_with_ellipsis() {
+        let long = "0x".to_string() + &"ab".repeat(200);
+        let out = truncate_value(&long, 16);
+        assert_eq!(out, "0xababababababab…");
+    }
+
+    #[test]
+    fn truncate_respects_utf8_boundaries() {
+        // "café" is 5 bytes (c, a, f, c3, a9). Truncating to 4 must back off
+        // to byte 3 ("caf") rather than splitting the é.
+        let out = truncate_value("café_long_suffix_long_suffix", 4);
+        assert_eq!(out, "caf…");
     }
 }
 
